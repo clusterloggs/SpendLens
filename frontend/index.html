@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Grocery Receipt Scanner</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">RS</div>
+          <div>
+            <h1>Receipt Scanner</h1>
+            <p>Extraction Console</p>
+          </div>
+        </div>
+
+        <section class="panel upload-panel">
+          <div class="panel-heading">
+            <h2>Upload</h2>
+            <button id="sampleBtn" class="icon-btn" title="Load sample receipt" type="button">◎</button>
+          </div>
+
+          <label class="field">
+            <span>Receipt file</span>
+            <input id="fileInput" type="file" accept="image/*,.pdf,.txt" />
+          </label>
+
+          <label class="field">
+            <span>OCR text</span>
+            <textarea id="ocrText" rows="8" spellcheck="false"></textarea>
+          </label>
+
+          <div class="toolbar">
+            <button id="uploadBtn" class="primary-btn" type="button">Upload</button>
+            <button id="refreshBtn" class="secondary-btn" type="button">Refresh</button>
+          </div>
+
+          <div id="uploadStatus" class="status-line"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>Receipts</h2>
+            <a class="icon-btn link-btn" href="/api/exports/receipt-items.csv" title="Export CSV">⇩</a>
+          </div>
+          <div id="receiptList" class="receipt-list"></div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <div class="workspace-header">
+          <div>
+            <h2 id="detailTitle">No receipt selected</h2>
+            <div id="detailMeta" class="muted"></div>
+          </div>
+          <div class="toolbar">
+            <button id="retryBtn" class="secondary-btn" type="button" disabled>Retry</button>
+            <button id="approveBtn" class="primary-btn" type="button" disabled>Approve</button>
+          </div>
+        </div>
+
+        <div id="emptyState" class="empty-state">
+          <strong>Upload or select a receipt.</strong>
+        </div>
+
+        <div id="detailView" class="detail-grid hidden">
+          <section class="panel media-panel">
+            <div class="panel-heading">
+              <h2>Source</h2>
+              <span id="qualityBadge" class="badge">Pending</span>
+            </div>
+            <div id="sourcePreview" class="source-preview"></div>
+            <div id="rawTextBox" class="raw-text"></div>
+          </section>
+
+          <section class="panel extraction-panel">
+            <div class="panel-heading">
+              <h2>Receipt</h2>
+              <span id="statusBadge" class="badge">Pending</span>
+            </div>
+
+            <div id="validationBox" class="validation-box"></div>
+
+            <form id="headerForm" class="header-form">
+              <label class="field compact">
+                <span>Store</span>
+                <input name="store_raw_name" />
+              </label>
+              <label class="field compact">
+                <span>Ticket</span>
+                <input name="ticket_number" />
+              </label>
+              <label class="field compact">
+                <span>Date</span>
+                <input name="receipt_date" type="date" />
+              </label>
+              <label class="field compact">
+                <span>Time</span>
+                <input name="receipt_time" type="time" />
+              </label>
+              <label class="field compact">
+                <span>Currency</span>
+                <input name="currency_code" maxlength="3" />
+              </label>
+              <label class="field compact">
+                <span>Customer</span>
+                <input name="customer_name" />
+              </label>
+              <label class="field compact">
+                <span>Seller</span>
+                <input name="seller" />
+              </label>
+              <label class="field compact">
+                <span>Subtotal</span>
+                <input name="subtotal_amount" inputmode="decimal" />
+              </label>
+              <label class="field compact">
+                <span>Tax</span>
+                <input name="tax_amount" inputmode="decimal" />
+              </label>
+              <label class="field compact">
+                <span>Discount</span>
+                <input name="discount_amount" inputmode="decimal" />
+              </label>
+              <label class="field compact">
+                <span>Total</span>
+                <input name="total_amount" inputmode="decimal" />
+              </label>
+            </form>
+
+            <div class="toolbar">
+              <button id="saveHeaderBtn" class="secondary-btn" type="button">Save Header</button>
+            </div>
+          </section>
+
+          <section class="panel table-panel">
+            <div class="panel-heading">
+              <h2>Items</h2>
+              <span id="itemCount" class="muted"></span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>Unit Price</th>
+                    <th>Total</th>
+                    <th>Confidence</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="itemsBody"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel events-panel">
+            <div class="panel-heading">
+              <h2>Events</h2>
+            </div>
+            <div id="eventsList" class="events-list"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

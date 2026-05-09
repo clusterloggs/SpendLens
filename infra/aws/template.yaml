@@ -1,0 +1,451 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Secure serverless receipt scanner MVP using API Gateway, Cognito, Lambda, S3, Textract, and DynamoDB.
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: receipt-scanner
+  StageName:
+    Type: String
+    Default: dev
+  AllowedCorsOrigin:
+    Type: String
+    Default: "http://localhost:8000"
+  ApiLambdaCodeBucket:
+    Type: String
+  ApiLambdaCodeKey:
+    Type: String
+  ProcessLambdaCodeBucket:
+    Type: String
+  ProcessLambdaCodeKey:
+    Type: String
+
+Resources:
+  ReceiptKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: !Sub "${ProjectName}-${StageName} receipt scanner encryption key"
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableAccountAdministration
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: "kms:*"
+            Resource: "*"
+
+  ReceiptKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${ProjectName}-${StageName}-receipts"
+      TargetKeyId: !Ref ReceiptKmsKey
+
+  ReceiptBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !GetAtt ReceiptKmsKey.Arn
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - !Ref AllowedCorsOrigin
+            AllowedMethods:
+              - PUT
+              - GET
+              - HEAD
+            AllowedHeaders:
+              - "*"
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3000
+      NotificationConfiguration:
+        EventBridgeConfiguration:
+          EventBridgeEnabled: true
+
+  StoresTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: normalized_name
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: normalized-name-index
+          KeySchema:
+            - AttributeName: normalized_name
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ReceiptsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+        - AttributeName: image_hash
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: user-created-index
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: image-hash-index
+          KeySchema:
+            - AttributeName: image_hash
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+
+  ReceiptItemsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: receipt_id
+          AttributeType: S
+        - AttributeName: line_number
+          AttributeType: N
+      KeySchema:
+        - AttributeName: receipt_id
+          KeyType: HASH
+        - AttributeName: line_number
+          KeyType: RANGE
+
+  ReceiptPaymentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: receipt_id
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: receipt_id
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+
+  ProcessingLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: receipt_id
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: receipt_id
+          KeyType: HASH
+        - AttributeName: created_at
+          KeyType: RANGE
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${ProjectName}-${StageName}-users"
+      UsernameAttributes:
+        - email
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "${ProjectName}-${StageName}-web"
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+
+  ApiFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ReceiptApiAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt StoresTable.Arn
+                  - !Sub "${StoresTable.Arn}/index/*"
+                  - !GetAtt ReceiptsTable.Arn
+                  - !Sub "${ReceiptsTable.Arn}/index/*"
+                  - !GetAtt ReceiptItemsTable.Arn
+                  - !GetAtt ReceiptPaymentsTable.Arn
+                  - !GetAtt ProcessingLogsTable.Arn
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub "${ReceiptBucket.Arn}/receipts/*"
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt ReceiptKmsKey.Arn
+
+  ProcessFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ReceiptProcessingAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource: !Sub "${ReceiptBucket.Arn}/receipts/*"
+              - Effect: Allow
+                Action:
+                  - textract:AnalyzeExpense
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                Resource:
+                  - !GetAtt StoresTable.Arn
+                  - !Sub "${StoresTable.Arn}/index/*"
+                  - !GetAtt ReceiptsTable.Arn
+                  - !Sub "${ReceiptsTable.Arn}/index/*"
+                  - !GetAtt ReceiptItemsTable.Arn
+                  - !GetAtt ReceiptPaymentsTable.Arn
+                  - !GetAtt ProcessingLogsTable.Arn
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                Resource: !GetAtt ReceiptKmsKey.Arn
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${StageName}-api"
+      Runtime: python3.12
+      Handler: api_handler.handler
+      Role: !GetAtt ApiFunctionRole.Arn
+      Timeout: 20
+      MemorySize: 256
+      Code:
+        S3Bucket: !Ref ApiLambdaCodeBucket
+        S3Key: !Ref ApiLambdaCodeKey
+      Environment:
+        Variables:
+          RECEIPT_BUCKET: !Ref ReceiptBucket
+          STORES_TABLE: !Ref StoresTable
+          RECEIPTS_TABLE: !Ref ReceiptsTable
+          RECEIPT_ITEMS_TABLE: !Ref ReceiptItemsTable
+          RECEIPT_PAYMENTS_TABLE: !Ref ReceiptPaymentsTable
+          PROCESSING_LOGS_TABLE: !Ref ProcessingLogsTable
+          DEFAULT_CURRENCY: NGN
+          PRESIGNED_URL_SECONDS: "600"
+
+  ProcessFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "${ProjectName}-${StageName}-process"
+      Runtime: python3.12
+      Handler: process_handler.handler
+      Role: !GetAtt ProcessFunctionRole.Arn
+      Timeout: 120
+      MemorySize: 512
+      Code:
+        S3Bucket: !Ref ProcessLambdaCodeBucket
+        S3Key: !Ref ProcessLambdaCodeKey
+      Environment:
+        Variables:
+          RECEIPT_BUCKET: !Ref ReceiptBucket
+          STORES_TABLE: !Ref StoresTable
+          RECEIPTS_TABLE: !Ref ReceiptsTable
+          RECEIPT_ITEMS_TABLE: !Ref ReceiptItemsTable
+          RECEIPT_PAYMENTS_TABLE: !Ref ReceiptPaymentsTable
+          PROCESSING_LOGS_TABLE: !Ref ProcessingLogsTable
+          DEFAULT_CURRENCY: NGN
+
+  ReceiptObjectCreatedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - aws.s3
+        detail-type:
+          - Object Created
+        detail:
+          bucket:
+            name:
+              - !Ref ReceiptBucket
+          object:
+            key:
+              - prefix: receipts/
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt ProcessFunction.Arn
+          Id: ProcessReceiptUpload
+
+  AllowEventBridgeProcessInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ProcessFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ReceiptObjectCreatedRule.Arn
+
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${ProjectName}-${StageName}-api"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - !Ref AllowedCorsOrigin
+        AllowMethods:
+          - GET
+          - POST
+          - PATCH
+          - OPTIONS
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+        MaxAge: 300
+
+  HttpApiAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: JWT
+      IdentitySource:
+        - "$request.header.Authorization"
+      Name: CognitoJwtAuthorizer
+      JwtConfiguration:
+        Audience:
+          - !Ref UserPoolClient
+        Issuer: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApiFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  ProxyRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "ANY /{proxy+}"
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      Target: !Sub "integrations/${ApiIntegration}"
+
+  RootRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: "ANY /"
+      AuthorizationType: JWT
+      AuthorizerId: !Ref HttpApiAuthorizer
+      Target: !Sub "integrations/${ApiIntegration}"
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: !Ref StageName
+      AutoDeploy: true
+
+  AllowApiGatewayInvokeApiFunction:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*/*/*"
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
+  ReceiptBucketName:
+    Value: !Ref ReceiptBucket
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  CognitoIssuer:
+    Value: !Sub "https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"

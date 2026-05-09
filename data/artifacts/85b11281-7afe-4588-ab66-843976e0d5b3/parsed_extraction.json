@@ -1,0 +1,195 @@
+{
+  "store_raw_name": "Fresh Valley Market #204",
+  "store_address": "1450 LAKE ROAD, 05/05/2026 18:23, REG 03 CASHIER MARIA",
+  "store_phone": "125500",
+  "store_confidence": 0.9,
+  "receipt_date": "2026-05-05",
+  "receipt_time": "18:23:00",
+  "currency_code": "USD",
+  "transaction_id": null,
+  "register_id": "03",
+  "cashier_name": "MARIA",
+  "customer_name": null,
+  "seller": null,
+  "subtotal_amount": "23.26",
+  "tax_amount": "0.94",
+  "discount_amount": "-1.75",
+  "fee_amount": null,
+  "tip_amount": null,
+  "total_amount": "22.45",
+  "items": [
+    {
+      "line_number": 1,
+      "page_number": 1,
+      "raw_text": "BANANAS 1.245 LB @ .69/LB 0.86",
+      "item_name_raw": "BANANAS",
+      "item_name_clean": "Bananas",
+      "quantity": "1.245",
+      "unit": "lb",
+      "unit_price_amount": "0.6900",
+      "total_price_amount": "0.86",
+      "discount_amount": "0.00",
+      "tax_amount": "0.00",
+      "is_taxable": null,
+      "is_discount": false,
+      "is_return": false,
+      "confidence": 0.93,
+      "review_required": false,
+      "bbox": null,
+      "parser_notes": {}
+    },
+    {
+      "line_number": 2,
+      "page_number": 1,
+      "raw_text": "ORGANIC MILK 1 GAL 5.49",
+      "item_name_raw": "ORGANIC MILK 1 GAL",
+      "item_name_clean": "Organic Milk 1 Gal",
+      "quantity": "1.000",
+      "unit": "ea",
+      "unit_price_amount": "5.4900",
+      "total_price_amount": "5.49",
+      "discount_amount": "0.00",
+      "tax_amount": "0.00",
+      "is_taxable": null,
+      "is_discount": false,
+      "is_return": false,
+      "confidence": 0.88,
+      "review_required": false,
+      "bbox": null,
+      "parser_notes": {}
+    },
+    {
+      "line_number": 3,
+      "page_number": 1,
+      "raw_text": "YOGURT 4 @ 1.25 5.00",
+      "item_name_raw": "YOGURT",
+      "item_name_clean": "Yogurt",
+      "quantity": "4.000",
+      "unit": "ea",
+      "unit_price_amount": "1.2500",
+      "total_price_amount": "5.00",
+      "discount_amount": "0.00",
+      "tax_amount": "0.00",
+      "is_taxable": null,
+      "is_discount": false,
+      "is_return": false,
+      "confidence": 0.91,
+      "review_required": false,
+      "bbox": null,
+      "parser_notes": {}
+    },
+    {
+      "line_number": 4,
+      "page_number": 1,
+      "raw_text": "WHOLE WHEAT BREAD 3.79",
+      "item_name_raw": "WHOLE WHEAT BREAD",
+      "item_name_clean": "Whole Wheat Bread",
+      "quantity": "1.000",
+      "unit": "ea",
+      "unit_price_amount": "3.7900",
+      "total_price_amount": "3.79",
+      "discount_amount": "0.00",
+      "tax_amount": "0.00",
+      "is_taxable": null,
+      "is_discount": false,
+      "is_return": false,
+      "confidence": 0.88,
+      "review_required": false,
+      "bbox": null,
+      "parser_notes": {}
+    },
+    {
+      "line_number": 5,
+      "page_number": 1,
+      "raw_text": "ROMA TOMATOES 2.10 LB @ 1.49/LB 3.13",
+      "item_name_raw": "ROMA TOMATOES",
+      "item_name_clean": "Roma Tomatoes",
+      "quantity": "2.100",
+      "unit": "lb",
+      "unit_price_amount": "1.4900",
+      "total_price_amount": "3.13",
+      "discount_amount": "0.00",
+      "tax_amount": "0.00",
+      "is_taxable": null,
+      "is_discount": false,
+      "is_return": false,
+      "confidence": 0.93,
+      "review_required": false,
+      "bbox": null,
+      "parser_notes": {}
+    },
+    {
+      "line_number": 6,
+      "page_number": 1,
+      "raw_text": "EGGS LARGE 12 CT 4.99",
+      "item_name_raw": "EGGS LARGE 12 CT",
+      "item_name_clean": "Eggs Large 12 Ct",
+      "quantity": "1.000",
+      "unit": "ea",
+      "unit_price_amount": "4.9900",
+      "total_price_amount": "4.99",
+      "discount_amount": "0.00",
+      "tax_amount": "0.00",
+      "is_taxable": null,
+      "is_discount": false,
+      "is_return": false,
+      "confidence": 0.88,
+      "review_required": false,
+      "bbox": null,
+      "parser_notes": {}
+    }
+  ],
+  "taxes": [
+    {
+      "label": "Tax",
+      "tax_amount": "0.94",
+      "confidence": 0.91,
+      "metadata": {}
+    }
+  ],
+  "discounts": [
+    {
+      "label": "Card Price",
+      "discount_type": "receipt_or_item",
+      "amount": "-1.00",
+      "confidence": 0.86,
+      "metadata": {
+        "raw_text": "CARD PRICE -1.00"
+      }
+    },
+    {
+      "label": "Mfr Coupon",
+      "discount_type": "receipt_or_item",
+      "amount": "-0.75",
+      "confidence": 0.86,
+      "metadata": {
+        "raw_text": "MFR COUPON -0.75"
+      }
+    }
+  ],
+  "payments": [
+    {
+      "method": "VISA",
+      "card_brand": "VISA",
+      "card_last4": "4242",
+      "amount": "22.45",
+      "change_amount": null,
+      "authorization_code": null,
+      "confidence": 0.83,
+      "metadata": {
+        "raw_text": "VISA **** 4242 22.45"
+      }
+    }
+  ],
+  "parser_metadata": {
+    "line_count": 18,
+    "raw_totals": {
+      "subtotal": "23.26",
+      "tax": "0.94",
+      "discount": "-1.75",
+      "fee": null,
+      "tip": null,
+      "total": "22.45"
+    }
+  }
+}
