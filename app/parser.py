@@ -22,8 +22,6 @@ WEIGHT_PATTERN = re.compile(
     re.I,
 )
 MULTIPLIER_PATTERN = re.compile(rf"(?P<qty>\d+(?:[.,]\d+)?)\s*(?:@|X|x|FOR)\s*\$?(?P<unit_price>{PRICE_TOKEN})", re.I)
-CARD_LAST4_PATTERN = re.compile(r"(?:\*{2,}|X{2,}|ending|last\s*4|card)\s*(?P<last4>\d{4})", re.I)
-
 TOTAL_LABELS = {
     "subtotal": re.compile(r"\b(SUB\s*TOTAL|SUBTOTAL|MERCHANDISE TOTAL|ITEM TOTAL)\b", re.I),
     "tax": re.compile(r"\b(SALES TAX|STATE TAX|LOCAL TAX|VAT|GST|HST|TAX)\b", re.I),
@@ -45,13 +43,7 @@ def parse_receipt_text(text: str, currency_code: str = DEFAULT_CURRENCY) -> dict
     receipt_date = extract_date(lines)
     receipt_time = extract_time(lines)
     totals = extract_totals(lines)
-    items, discounts = extract_items(lines)
-    if discounts:
-        totals["discount"] = sum((money_to_decimal(discount.get("amount")) or Decimal("0.00")) for discount in discounts)
-    payments = extract_payments(lines, totals.get("total"))
-    taxes = []
-    if totals.get("tax") is not None:
-        taxes.append({"label": "Tax", "tax_amount": totals["tax"], "confidence": 0.91, "metadata": {}})
+    items = extract_items(lines)
 
     confidence_parts = []
     if store_name:
@@ -77,15 +69,8 @@ def parse_receipt_text(text: str, currency_code: str = DEFAULT_CURRENCY) -> dict
         "customer_name": extract_labeled_text(lines, "CUSTOMER"),
         "seller": extract_labeled_text(lines, "SELLER"),
         "subtotal_amount": decimal_to_wire(totals.get("subtotal")),
-        "tax_amount": decimal_to_wire(totals.get("tax")),
-        "discount_amount": decimal_to_wire(totals.get("discount")),
-        "fee_amount": decimal_to_wire(totals.get("fee")),
-        "tip_amount": decimal_to_wire(totals.get("tip")),
         "total_amount": decimal_to_wire(totals.get("total")),
         "items": items,
-        "taxes": taxes,
-        "discounts": discounts,
-        "payments": payments,
         "parser_metadata": {
             "line_count": len(lines),
             "raw_totals": {key: decimal_to_wire(value) for key, value in totals.items()},
@@ -228,9 +213,8 @@ def extract_totals(lines: list[str]) -> dict[str, Decimal | None]:
     return totals
 
 
-def extract_items(lines: list[str]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def extract_items(lines: list[str]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
-    discounts: list[dict[str, Any]] = []
     in_items = False
     pending_name: str | None = None
 
@@ -257,18 +241,6 @@ def extract_items(lines: list[str]) -> tuple[list[dict[str, Any]], list[dict[str
             continue
 
         if is_discount_line(line):
-            amount = amounts[-1]
-            if amount > 0:
-                amount = -amount
-            discounts.append(
-                {
-                    "label": clean_label(strip_last_money(line)),
-                    "discount_type": "receipt_or_item",
-                    "amount": decimal_to_wire(amount),
-                    "confidence": 0.86,
-                    "metadata": {"raw_text": line},
-                }
-            )
             continue
 
         item = parse_item_line(line, amounts[-1], len(items) + 1, pending_name)
@@ -276,7 +248,7 @@ def extract_items(lines: list[str]) -> tuple[list[dict[str, Any]], list[dict[str
         if item:
             items.append(item)
 
-    return items, discounts
+    return items
 
 
 def looks_like_item_line(line: str) -> bool:
@@ -342,47 +314,12 @@ def parse_item_line(line: str, total: Decimal, line_number: int, pending_name: s
         "unit": unit,
         "unit_price_amount": decimal_to_wire(unit_price, "0.0001"),
         "total_price_amount": decimal_to_wire(total),
-        "discount_amount": "0.00",
-        "tax_amount": "0.00",
-        "is_taxable": detect_taxable_flag(line),
-        "is_discount": False,
         "is_return": total < 0,
         "confidence": round(max(0.0, min(0.99, confidence)), 4),
         "review_required": confidence < 0.8,
         "bbox": None,
         "parser_notes": {},
     }
-
-
-def extract_payments(lines: list[str], total: Decimal | None) -> list[dict[str, Any]]:
-    payments = []
-    change_amount = None
-    for line in lines:
-        if re.search(r"\bCHANGE\b", line, re.I):
-            amounts = money_values(line)
-            if amounts:
-                change_amount = amounts[-1]
-            continue
-        if not PAYMENT_LABEL.search(line):
-            continue
-        amounts = money_values(line)
-        method_match = PAYMENT_LABEL.search(line)
-        last4_match = CARD_LAST4_PATTERN.search(line)
-        payments.append(
-            {
-                "method": method_match.group(1).upper().replace("MASTER CARD", "MASTERCARD") if method_match else None,
-                "card_brand": method_match.group(1).upper() if method_match and method_match.group(1).upper() in {"VISA", "MASTERCARD", "AMEX", "DISCOVER"} else None,
-                "card_last4": last4_match.group("last4") if last4_match else None,
-                "amount": decimal_to_wire(amounts[-1] if amounts else total),
-                "change_amount": decimal_to_wire(change_amount),
-                "authorization_code": extract_auth_code(line),
-                "confidence": 0.83,
-                "metadata": {"raw_text": redact_card_numbers(line)},
-            }
-        )
-    if change_amount is not None and payments:
-        payments[-1]["change_amount"] = decimal_to_wire(change_amount)
-    return payments
 
 
 def extract_labeled_value(lines: list[str], labels: tuple[str, ...]) -> str | None:
@@ -402,11 +339,6 @@ def extract_labeled_text(lines: list[str], label: str) -> str | None:
         if match:
             return match.group(1).strip()
     return None
-
-
-def extract_auth_code(line: str) -> str | None:
-    match = re.search(r"\bAUTH\s*[:#-]?\s*([A-Za-z0-9-]+)", line, re.I)
-    return match.group(1) if match else None
 
 
 def money_values(line: str) -> list[Decimal]:
@@ -430,11 +362,6 @@ def is_discount_line(line: str) -> bool:
     return bool(TOTAL_LABELS["discount"].search(line) or re.search(r"\b(CPN|MFR|SAVINGS)\b", line, re.I))
 
 
-def clean_label(value: str) -> str:
-    value = re.sub(r"\s+", " ", value).strip(":- ")
-    return titleish(value) or "Discount"
-
-
 def clean_item_name(value: str) -> str:
     value = re.sub(r"\b(?:UPC|SKU|PLU)\s*[:#]?\s*\d+\b", "", value, flags=re.I)
     value = re.sub(r"^\d{4,14}\s+", "", value)
@@ -452,19 +379,7 @@ def normalize_unit(unit: str | None) -> str | None:
     return unit
 
 
-def detect_taxable_flag(line: str) -> bool | None:
-    if re.search(r"\sT\s*(?:\$?\d|$)", line):
-        return True
-    if re.search(r"\sN\s*(?:\$?\d|$)", line):
-        return False
-    return None
-
-
 def decimal_to_wire(value: Decimal | None, places: str = "0.01") -> str | None:
     if value is None:
         return None
     return str(value.quantize(Decimal(places)))
-
-
-def redact_card_numbers(line: str) -> str:
-    return re.sub(r"\b\d{12,19}\b", "[redacted-card-number]", line)

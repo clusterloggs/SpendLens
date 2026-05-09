@@ -3,3 +3,4 @@ uvicorn
 sqlalchemy
 pillow
 boto3
+httpx

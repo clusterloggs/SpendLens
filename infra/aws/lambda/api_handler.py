@@ -20,7 +20,6 @@ BUCKET = os.environ["RECEIPT_BUCKET"]
 STORES_TABLE = dynamodb.Table(os.environ["STORES_TABLE"])
 RECEIPTS_TABLE = dynamodb.Table(os.environ["RECEIPTS_TABLE"])
 ITEMS_TABLE = dynamodb.Table(os.environ["RECEIPT_ITEMS_TABLE"])
-PAYMENTS_TABLE = dynamodb.Table(os.environ["RECEIPT_PAYMENTS_TABLE"])
 LOGS_TABLE = dynamodb.Table(os.environ["PROCESSING_LOGS_TABLE"])
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "NGN")
 PRESIGNED_URL_SECONDS = int(os.getenv("PRESIGNED_URL_SECONDS", "600"))
@@ -112,10 +111,6 @@ def get_receipt(user_id: str, receipt_id: str) -> dict:
         ExpressionAttributeValues={":receipt_id": receipt_id},
         ScanIndexForward=True,
     ).get("Items", [])
-    payments = PAYMENTS_TABLE.query(
-        KeyConditionExpression="receipt_id = :receipt_id",
-        ExpressionAttributeValues={":receipt_id": receipt_id},
-    ).get("Items", [])
     logs = LOGS_TABLE.query(
         KeyConditionExpression="receipt_id = :receipt_id",
         ExpressionAttributeValues={":receipt_id": receipt_id},
@@ -126,7 +121,6 @@ def get_receipt(user_id: str, receipt_id: str) -> dict:
     return {
         **public_receipt(receipt),
         "items": [decimal_to_json(item) for item in items],
-        "payments": [decimal_to_json(payment) for payment in payments],
         "events": [decimal_to_json(log) for log in logs],
     }
 
@@ -140,9 +134,6 @@ def update_receipt(user_id: str, receipt_id: str, payload: dict) -> dict:
         "customer_name",
         "seller",
         "currency_code",
-        "subtotal_amount",
-        "tax_amount",
-        "discount_amount",
         "total_amount",
     }
     updates = {key: value for key, value in payload.items() if key in allowed}

@@ -1,0 +1,84 @@
+{
+  "store_raw_name": "GROCERY BAZAAR LIMITED",
+  "store_address": "GROCERY BAZAAR LIMITED\n71, Meiran Road\nNear Kabowei Junction, Meiran",
+  "store_phone": "08150891199",
+  "store_confidence": 0.9999,
+  "receipt_date": "2026-05-08",
+  "receipt_time": null,
+  "currency_code": "USD",
+  "transaction_id": null,
+  "register_id": null,
+  "cashier_name": null,
+  "customer_name": "Walk-in Customer",
+  "seller": "victoria.oamen@grocerybazaai.store",
+  "subtotal_amount": null,
+  "tax_amount": null,
+  "discount_amount": null,
+  "fee_amount": null,
+  "tip_amount": null,
+  "total_amount": "1600.00",
+  "items": [
+    {
+      "line_number": 1,
+      "page_number": 1,
+      "raw_text": "GB Medium Carrier Bag 1 N100.00 \u20a6100.00 GB Medium Carrier Bag 1 N100.00 \u20a6100.00",
+      "item_name_raw": "GB Medium Carrier Bag",
+      "item_name_clean": "GB Medium Carrier Bag",
+      "quantity": "1.000",
+      "unit": "ea",
+      "unit_price_amount": "100.00",
+      "total_price_amount": "100.00",
+      "discount_amount": "0.00",
+      "tax_amount": "0.00",
+      "is_taxable": null,
+      "is_discount": false,
+      "is_return": false,
+      "confidence": 0.9999,
+      "review_required": false,
+      "bbox": null,
+      "parser_notes": {
+        "source": "aws_textract_line_item"
+      }
+    },
+    {
+      "line_number": 2,
+      "page_number": 1,
+      "raw_text": "Golden Bite Sardine\nBread 1 \u20a61500.00 \u20a61500.00 Golden Bite Sardine 1 \u20a61500.00 \u20a61500.00\nBread",
+      "item_name_raw": "Golden Bite Sardine\nBread",
+      "item_name_clean": "Golden Bite Sardine\nBread",
+      "quantity": "1.000",
+      "unit": "ea",
+      "unit_price_amount": "1500.00",
+      "total_price_amount": "1500.00",
+      "discount_amount": "0.00",
+      "tax_amount": "0.00",
+      "is_taxable": null,
+      "is_discount": false,
+      "is_return": false,
+      "confidence": 0.9998,
+      "review_required": false,
+      "bbox": null,
+      "parser_notes": {
+        "source": "aws_textract_line_item"
+      }
+    }
+  ],
+  "taxes": [],
+  "discounts": [],
+  "payments": [
+    {
+      "method": null,
+      "amount": "1600.00",
+      "change_amount": "40.00",
+      "confidence": 0.8323,
+      "metadata": {
+        "source": "aws_textract_summary_fields"
+      }
+    }
+  ],
+  "parser_metadata": {
+    "source": "aws_textract_analyze_expense",
+    "summary_field_count": 15,
+    "line_item_count": 2
+  }
+}

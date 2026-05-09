@@ -51,8 +51,7 @@ class ApiFlowTests(unittest.TestCase):
         self.assertEqual(receipt["store_raw_name"], "Fresh Valley Market #204")
         self.assertEqual(receipt["total_amount"], 22.45)
         self.assertEqual(len(receipt["items"]), 6)
-        self.assertEqual(receipt["payments"][0]["method"], "VISA")
-        self.assertEqual(receipt["payments"][0]["amount"], 22.45)
+        self.assertNotIn("payments", receipt)
 
 
 if __name__ == "__main__":

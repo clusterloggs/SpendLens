@@ -4,12 +4,11 @@ Runnable MVP implementation of the grocery receipt scanning app.
 
 ## Current MVP Scope
 
-The app now uses the lean five-table design:
+The app now uses the lean four-table design:
 
 - `stores`
 - `receipts`
 - `receipt_items`
-- `receipt_payments`
 - `processing_logs`
 
 `receipts.id` is the internal primary key. Ticket numbers, image names, image hashes, and log IDs are metadata, not relationship keys.
@@ -24,7 +23,7 @@ The app now uses the lean five-table design:
   - optional OCR text override for local development,
   - AWS Textract `AnalyzeExpense` support for production receipt extraction,
   - automatic Tesseract CLI support when `tesseract` is installed on PATH.
-- Heuristic receipt parser for store, phone, address, date, time, ticket number, customer, seller, items, totals, transfer/card/cash payments, and change.
+- Heuristic receipt parser for store, phone, address, date, time, ticket number, customer, seller, items, and receipt total.
 - Validation for missing fields, line-item reconciliation, total reconciliation, future dates, and confidence thresholds.
 - Parser/API tests and a sample grocery receipt fixture.
 
@@ -60,7 +59,7 @@ For production, use **Amazon Textract AnalyzeExpense**.
 Why:
 
 - It is designed for invoices and receipts.
-- It returns standardized receipt fields such as receipt date, receipt number, vendor name, vendor phone, subtotal, tax, total, amount paid, item description, quantity, unit price, and item price.
+- It returns standardized receipt fields such as receipt date, receipt number, vendor name, vendor phone, total, item description, quantity, unit price, and item price.
 - That output maps directly to the MVP tables with less custom parsing than raw OCR.
 
 ## AWS Textract Setup
@@ -101,8 +100,9 @@ textract:AnalyzeExpense
 Current behavior:
 
 - Image uploads are sent to Textract as bytes using `AnalyzeExpense`.
-- Textract `SummaryFields` map to `stores`, `receipts`, and `receipt_payments`.
+- Textract `SummaryFields` map to `stores` and `receipts`.
 - Textract `LineItemGroups` map to `receipt_items`.
+- Payment, change, tax, discount, and amount-paid fields are treated as OCR noise for this MVP and are not stored.
 - If AWS is not enabled, the app still supports `.txt` uploads, manual OCR text, and Tesseract when installed.
 
 Good alternatives:

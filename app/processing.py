@@ -3,15 +3,17 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+import re
 
 from sqlalchemy.orm import Session
 
 from .config import ARTIFACT_DIR, DEFAULT_CURRENCY
 from .database import SessionLocal
 from .image_quality import analyze_image
-from .models import ProcessingLog, Receipt, ReceiptItem, ReceiptPayment, Store, utc_now
+from .models import ProcessingLog, Receipt, ReceiptItem, Store, utc_now
 from .ocr import OCRUnavailable, run_ocr
 from .parser import parse_receipt_text
+from .postprocess import polish_extraction
 from .utils import money_to_decimal, normalize_store_name, parse_decimal, parse_iso_date, parse_iso_time, titleish
 from .validation import validate_extraction
 
@@ -56,7 +58,9 @@ def process_receipt(db: Session, receipt_id: str, manual_ocr_text: str | None = 
     if not extraction or not extraction.get("items"):
         extraction = parse_receipt_text(ocr_result.text, receipt.currency_code or DEFAULT_CURRENCY)
     elif not extraction.get("currency_code"):
-        extraction["currency_code"] = receipt.currency_code or DEFAULT_CURRENCY
+        extraction["currency_code"] = infer_currency(ocr_result.text, receipt.currency_code)
+    normalize_extraction_defaults(extraction, ocr_result.text)
+    extraction = polish_extraction(extraction, ocr_result.text)
     status, validation_errors, _overall_confidence = validate_extraction(extraction)
     write_artifact(receipt.id, "parsed_extraction.json", json.dumps(extraction, indent=2, default=str))
 
@@ -73,8 +77,7 @@ def process_receipt(db: Session, receipt_id: str, manual_ocr_text: str | None = 
 
 
 def replace_extracted_rows(db: Session, receipt_id: str) -> None:
-    for model in (ReceiptItem, ReceiptPayment):
-        db.query(model).filter(model.receipt_id == receipt_id).delete()
+    db.query(ReceiptItem).filter(ReceiptItem.receipt_id == receipt_id).delete()
 
 
 def upsert_store(db: Session, raw_name: str | None, address: str | None = None, phone: str | None = None) -> Store | None:
@@ -111,9 +114,6 @@ def apply_receipt_fields(receipt: Receipt, extraction: dict, store_id: str | Non
     receipt.customer_name = extraction.get("customer_name")
     receipt.seller = extraction.get("seller") or extraction.get("cashier_name")
     receipt.currency_code = extraction.get("currency_code") or receipt.currency_code or DEFAULT_CURRENCY
-    receipt.subtotal_amount = money_to_decimal(extraction.get("subtotal_amount"))
-    receipt.tax_amount = money_to_decimal(extraction.get("tax_amount"))
-    receipt.discount_amount = money_to_decimal(extraction.get("discount_amount"))
     receipt.total_amount = money_to_decimal(extraction.get("total_amount"))
     receipt.raw_ocr_text = raw_text
     receipt.validation_message = "; ".join(f"{error['code']}: {error['message']}" for error in validation_errors) if validation_errors else None
@@ -129,16 +129,6 @@ def insert_extracted_rows(db: Session, receipt_id: str, extraction: dict) -> Non
                 quantity=parse_decimal(item.get("quantity")) or 1,
                 unit_price=money_to_decimal(item.get("unit_price_amount")),
                 total_price=money_to_decimal(item.get("total_price_amount")),
-            )
-        )
-
-    for payment in extraction.get("payments", []):
-        db.add(
-            ReceiptPayment(
-                receipt_id=receipt_id,
-                method=payment.get("method"),
-                amount=money_to_decimal(payment.get("amount")),
-                change_amount=money_to_decimal(payment.get("change_amount")),
             )
         )
 
@@ -158,3 +148,18 @@ def log_event(db: Session, receipt_id: str, stage: str, status: str, message: st
 def record_correction(db: Session, receipt_id: str, field_path: str, old_value, new_value, item_id: str | None = None) -> None:
     message = f"{field_path}: {old_value!s} -> {new_value!s}"
     log_event(db, receipt_id, "review", "corrected", message)
+
+
+def normalize_extraction_defaults(extraction: dict, raw_text: str) -> None:
+    if not extraction.get("currency_code") or extraction.get("currency_code") == "USD":
+        extraction["currency_code"] = infer_currency(raw_text, extraction.get("currency_code"))
+
+
+def infer_currency(raw_text: str, fallback: str | None = None) -> str:
+    if "₦" in raw_text:
+        return "NGN"
+    if re.search(r"(?<![A-Z])N\s?\d+(?:[,.]\d{2})", raw_text, re.I):
+        return "NGN"
+    if re.search(r"(?<![A-Z])#\s?\d+(?:[,.]\d{2})", raw_text):
+        return "NGN"
+    return fallback or DEFAULT_CURRENCY

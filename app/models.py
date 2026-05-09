@@ -49,9 +49,6 @@ class Receipt(Base):
     seller: Mapped[str | None] = mapped_column(Text)
 
     currency_code: Mapped[str] = mapped_column(String(3), default="USD")
-    subtotal_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
-    tax_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
-    discount_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
     total_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
 
     raw_ocr_text: Mapped[str | None] = mapped_column(Text)
@@ -66,7 +63,6 @@ class Receipt(Base):
 
     store = relationship("Store", back_populates="receipts")
     items = relationship("ReceiptItem", cascade="all, delete-orphan", back_populates="receipt", order_by="ReceiptItem.line_number")
-    payments = relationship("ReceiptPayment", cascade="all, delete-orphan", back_populates="receipt")
     logs = relationship("ProcessingLog", cascade="all, delete-orphan", back_populates="receipt", order_by="ProcessingLog.created_at")
 
 
@@ -85,19 +81,6 @@ class ReceiptItem(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     receipt = relationship("Receipt", back_populates="items")
-
-
-class ReceiptPayment(Base):
-    __tablename__ = "receipt_payments"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
-    receipt_id: Mapped[str] = mapped_column(String(36), ForeignKey("receipts.id"), index=True)
-    method: Mapped[str | None] = mapped_column(Text)
-    amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
-    change_amount: Mapped[float | None] = mapped_column(Numeric(12, 2))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-
-    receipt = relationship("Receipt", back_populates="payments")
 
 
 class ProcessingLog(Base):

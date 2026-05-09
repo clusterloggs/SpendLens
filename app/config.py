@@ -15,7 +15,7 @@ MAX_DOCUMENT_UPLOAD_BYTES = int(os.getenv("MAX_DOCUMENT_UPLOAD_BYTES", str(50 * 
 MAX_MANUAL_OCR_CHARS = int(os.getenv("MAX_MANUAL_OCR_CHARS", "200000"))
 
 OCR_PROVIDER = os.getenv("OCR_PROVIDER", "auto").lower()
-DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "USD")
+DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "NGN")
 APP_HOST = os.getenv("APP_HOST", "127.0.0.1")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
 

@@ -82,7 +82,7 @@ async function uploadAndProcess() {
       file_size_bytes: file.size,
       source: "web_upload",
       client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      currency_code: "USD",
+      currency_code: "NGN",
     },
   });
 
@@ -202,12 +202,9 @@ function renderHeader(receipt) {
   setFormValue("ticket_number", receipt.ticket_number || receipt.transaction_id || "");
   setFormValue("receipt_date", receipt.receipt_date || "");
   setFormValue("receipt_time", trimSeconds(receipt.receipt_time || ""));
-  setFormValue("currency_code", receipt.currency_code || "USD");
+  setFormValue("currency_code", receipt.currency_code || "NGN");
   setFormValue("customer_name", receipt.customer_name || "");
   setFormValue("seller", receipt.seller || "");
-  setFormValue("subtotal_amount", numberValue(receipt.subtotal_amount));
-  setFormValue("tax_amount", numberValue(receipt.tax_amount));
-  setFormValue("discount_amount", numberValue(receipt.discount_amount));
   setFormValue("total_amount", numberValue(receipt.total_amount));
 }
 
@@ -345,7 +342,7 @@ function contentTypeFromName(name) {
   return "image/jpeg";
 }
 
-function money(value, currency = "USD") {
+function money(value, currency = "NGN") {
   if (value === null || value === undefined || value === "") {
     return "No total";
   }

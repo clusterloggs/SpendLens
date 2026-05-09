@@ -15,7 +15,6 @@ This folder deploys the secure AWS version of the receipt scanner MVP.
   - `stores`
   - `receipts`
   - `receipt_items`
-  - `receipt_payments`
   - `processing_logs`
 
 The DynamoDB design keeps the same logical relationship model:
@@ -23,7 +22,6 @@ The DynamoDB design keeps the same logical relationship model:
 ```text
 receipts.id
   -> receipt_items.receipt_id
-  -> receipt_payments.receipt_id
   -> processing_logs.receipt_id
 ```
 

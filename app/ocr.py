@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import time
+import re
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -94,9 +95,10 @@ def run_aws_textract_analyze_expense(file_path: Path) -> OCRResult:
 
 def textract_response_to_extraction(response: dict[str, Any]) -> dict[str, Any]:
     summary_values: dict[str, dict[str, Any]] = {}
-    payments: list[dict[str, Any]] = []
+    other_values: list[str] = []
     items: list[dict[str, Any]] = []
     detected_currency = None
+    full_text = textract_expense_to_text(response)
 
     for document in response.get("ExpenseDocuments", []):
         for field in document.get("SummaryFields", []):
@@ -109,6 +111,8 @@ def textract_response_to_extraction(response: dict[str, Any]) -> dict[str, Any]:
                 detected_currency = currency
             if not value:
                 continue
+            if field_type == "OTHER":
+                other_values.append(value)
             summary_values[field_type] = {
                 "value": value,
                 "label": label,
@@ -121,28 +125,14 @@ def textract_response_to_extraction(response: dict[str, Any]) -> dict[str, Any]:
                 summary_values["CUSTOMER_NAME"] = {"value": value, "label": label, "confidence": confidence_to_unit(confidence)}
             if "SELLER" in label_upper or "CASHIER" in label_upper:
                 summary_values["SELLER"] = {"value": value, "label": label, "confidence": confidence_to_unit(confidence)}
-            if "CHANGE" in label_upper:
-                summary_values["CHANGE"] = {"value": value, "label": label, "confidence": confidence_to_unit(confidence)}
+
+        infer_customer_seller_from_other_values(summary_values, other_values)
 
         for group in document.get("LineItemGroups", []):
             for line_item in group.get("LineItems", []):
                 mapped_item = textract_line_item_to_extraction(line_item, len(items) + 1)
                 if mapped_item:
                     items.append(mapped_item)
-
-    amount_paid = summary_amount(summary_values, "AMOUNT_PAID") or summary_amount(summary_values, "TOTAL")
-    payment_type = summary_text(summary_values, "PAYMENT_TYPE")
-    change_amount = summary_amount(summary_values, "CHANGE")
-    if amount_paid or payment_type or change_amount:
-        payments.append(
-            {
-                "method": normalize_payment_method(payment_type),
-                "amount": amount_paid,
-                "change_amount": change_amount,
-                "confidence": summary_confidence(summary_values, "AMOUNT_PAID") or summary_confidence(summary_values, "TOTAL") or 0.8,
-                "metadata": {"source": "aws_textract_summary_fields"},
-            }
-        )
 
     raw_date = summary_text(summary_values, "INVOICE_RECEIPT_DATE") or summary_text(summary_values, "RECEIPT_DATE")
     raw_time = summary_text(summary_values, "PURCHASE_TIME") or summary_text(summary_values, "TRANSACTION_TIME")
@@ -154,22 +144,15 @@ def textract_response_to_extraction(response: dict[str, Any]) -> dict[str, Any]:
         "store_confidence": summary_confidence(summary_values, "VENDOR_NAME") or summary_confidence(summary_values, "SUPPLIER_NAME") or 0.0,
         "receipt_date": normalize_date_text(raw_date),
         "receipt_time": normalize_time_text(raw_time),
-        "currency_code": detected_currency,
-        "transaction_id": summary_text(summary_values, "INVOICE_RECEIPT_ID") or summary_text(summary_values, "RECEIPT_ID"),
+        "currency_code": detected_currency or infer_currency_from_text(full_text),
+        "transaction_id": summary_text(summary_values, "INVOICE_RECEIPT_ID") or summary_text(summary_values, "RECEIPT_ID") or extract_ticket_number(full_text),
         "register_id": summary_text(summary_values, "REGISTER_ID"),
         "cashier_name": summary_text(summary_values, "CASHIER"),
         "customer_name": summary_text(summary_values, "CUSTOMER_NAME"),
         "seller": summary_text(summary_values, "SELLER"),
         "subtotal_amount": summary_amount(summary_values, "SUBTOTAL"),
-        "tax_amount": summary_amount(summary_values, "TAX") or summary_amount(summary_values, "TOTAL_TAX"),
-        "discount_amount": normalize_discount(summary_amount(summary_values, "DISCOUNT")),
-        "fee_amount": summary_amount(summary_values, "SERVICE_CHARGE") or summary_amount(summary_values, "SHIPPING_HANDLING_CHARGE"),
-        "tip_amount": summary_amount(summary_values, "GRATUITY"),
         "total_amount": summary_amount(summary_values, "TOTAL") or summary_amount(summary_values, "AMOUNT_DUE"),
         "items": items,
-        "taxes": [],
-        "discounts": [],
-        "payments": payments,
         "parser_metadata": {
             "source": "aws_textract_analyze_expense",
             "summary_field_count": len(summary_values),
@@ -219,10 +202,6 @@ def textract_line_item_to_extraction(line_item: dict[str, Any], line_number: int
         "unit": "ea",
         "unit_price_amount": unit_price,
         "total_price_amount": total_price,
-        "discount_amount": "0.00",
-        "tax_amount": "0.00",
-        "is_taxable": None,
-        "is_discount": False,
         "is_return": False,
         "confidence": confidence,
         "review_required": confidence < 0.8,
@@ -234,6 +213,10 @@ def textract_line_item_to_extraction(line_item: dict[str, Any], line_number: int
 def textract_expense_to_text(response: dict) -> str:
     lines: list[str] = []
     for document in response.get("ExpenseDocuments", []):
+        for block in document.get("Blocks", []):
+            if block.get("BlockType") == "LINE" and block.get("Text"):
+                lines.append(block["Text"])
+
         for field in document.get("SummaryFields", []):
             field_type = field.get("Type", {}).get("Text")
             value = field.get("ValueDetection", {}).get("Text")
@@ -256,6 +239,43 @@ def textract_expense_to_text(response: dict) -> str:
                 if row:
                     lines.append(row)
     return "\n".join(lines)
+
+
+def infer_customer_seller_from_other_values(summary_values: dict[str, dict[str, Any]], values: list[str]) -> None:
+    if summary_values.get("CUSTOMER_NAME") and summary_values.get("SELLER"):
+        return
+    for value in values:
+        clean = value.strip()
+        if not clean:
+            continue
+        lower = clean.lower()
+        if "@" in clean and not summary_values.get("SELLER"):
+            summary_values["SELLER"] = {"value": clean, "label": "OTHER", "confidence": 0.7}
+        elif "customer" in lower and not summary_values.get("CUSTOMER_NAME"):
+            summary_values["CUSTOMER_NAME"] = {"value": clean, "label": "OTHER", "confidence": 0.7}
+
+
+def infer_currency_from_text(text: str) -> str | None:
+    if "₦" in text:
+        return "NGN"
+    if re.search(r"(?<![A-Z])N\s?\d+(?:[,.]\d{2})", text, re.I):
+        return "NGN"
+    if re.search(r"(?<![A-Z])#\s?\d+(?:[,.]\d{2})", text):
+        return "NGN"
+    return None
+
+
+def extract_ticket_number(text: str) -> str | None:
+    patterns = [
+        r"\bTicket\s*[:#-]?\s*(?P<value>[A-Za-z0-9][A-Za-z0-9 _./:-]{4,})",
+        r"\bReceipt\s*(?:No|Number|#)?\s*[:#-]?\s*(?P<value>[A-Za-z0-9][A-Za-z0-9 _./:-]{4,})",
+        r"\b(?P<value>[A-Z]+(?:\s+[A-Z0-9]+)*CASHPOINT\d*[-A-Z0-9]+)\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.I)
+        if match:
+            return re.sub(r"\s+", " ", match.group("value")).strip(" .")
+    return None
 
 
 def normalize_textract_type(value: str | None) -> str:
@@ -304,32 +324,10 @@ def amount_from(fields: dict[str, dict[str, Any]], field: str) -> str | None:
     return decimal_to_wire(money_to_decimal(text_from(fields, field)))
 
 
-def normalize_discount(value: str | None) -> str | None:
-    amount = money_to_decimal(value)
-    if amount is None:
-        return None
-    if amount > 0:
-        amount = -amount
-    return decimal_to_wire(amount)
-
-
 def decimal_to_wire(value: Decimal | None, places: str = "0.01") -> str | None:
     if value is None:
         return None
     return str(value.quantize(Decimal(places)))
-
-
-def normalize_payment_method(value: str | None) -> str | None:
-    if not value:
-        return None
-    normalized = value.strip().upper()
-    if "BANK" in normalized or "TRANSFER" in normalized:
-        return "TRANSFER"
-    if "CARD" in normalized or normalized in {"VISA", "MASTERCARD", "MASTER CARD", "AMEX", "DISCOVER"}:
-        return normalized.replace("MASTER CARD", "MASTERCARD")
-    if "CASH" in normalized:
-        return "CASH"
-    return normalized
 
 
 def digits_only(value: str | None) -> str | None:

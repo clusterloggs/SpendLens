@@ -19,7 +19,6 @@ textract = boto3.client("textract")
 STORES_TABLE = dynamodb.Table(os.environ["STORES_TABLE"])
 RECEIPTS_TABLE = dynamodb.Table(os.environ["RECEIPTS_TABLE"])
 ITEMS_TABLE = dynamodb.Table(os.environ["RECEIPT_ITEMS_TABLE"])
-PAYMENTS_TABLE = dynamodb.Table(os.environ["RECEIPT_PAYMENTS_TABLE"])
 LOGS_TABLE = dynamodb.Table(os.environ["PROCESSING_LOGS_TABLE"])
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "NGN")
 
@@ -74,18 +73,6 @@ def persist_extraction(receipt: dict, extraction: dict, head: dict) -> None:
             }
         )
 
-    for payment in extraction["payments"]:
-        PAYMENTS_TABLE.put_item(
-            Item={
-                "receipt_id": receipt_id,
-                "id": str(uuid.uuid4()),
-                "method": payment.get("method"),
-                "amount": decimal_or_none(payment.get("amount")),
-                "change_amount": decimal_or_none(payment.get("change_amount")),
-                "created_at": now_iso(),
-            }
-        )
-
     update_receipt(
         receipt_id,
         {
@@ -96,9 +83,6 @@ def persist_extraction(receipt: dict, extraction: dict, head: dict) -> None:
             "customer_name": extraction.get("customer_name"),
             "seller": extraction.get("seller"),
             "currency_code": extraction.get("currency_code") or receipt.get("currency_code") or DEFAULT_CURRENCY,
-            "subtotal_amount": decimal_or_none(extraction.get("subtotal_amount")),
-            "tax_amount": decimal_or_none(extraction.get("tax_amount")),
-            "discount_amount": decimal_or_none(extraction.get("discount_amount")),
             "total_amount": decimal_or_none(extraction.get("total_amount")),
             "status": extraction["status"],
             "validation_message": extraction.get("validation_message"),
@@ -137,17 +121,6 @@ def textract_response_to_extraction(response: dict, fallback_currency: str) -> d
                 if mapped:
                     items.append(mapped)
 
-    payments = []
-    amount_paid = money_string(summary.get("AMOUNT_PAID") or summary.get("TOTAL"))
-    if amount_paid or summary.get("PAYMENT_TYPE") or summary.get("CHANGE"):
-        payments.append(
-            {
-                "method": normalize_payment(summary.get("PAYMENT_TYPE")),
-                "amount": amount_paid,
-                "change_amount": money_string(summary.get("CHANGE")),
-            }
-        )
-
     validation_message = None
     status = "validated"
     if not items:
@@ -167,12 +140,8 @@ def textract_response_to_extraction(response: dict, fallback_currency: str) -> d
         "customer_name": summary.get("CUSTOMER_NAME"),
         "seller": summary.get("SELLER") or summary.get("CASHIER"),
         "currency_code": currency,
-        "subtotal_amount": money_string(summary.get("SUBTOTAL")),
-        "tax_amount": money_string(summary.get("TAX") or summary.get("TOTAL_TAX")),
-        "discount_amount": normalize_discount(summary.get("DISCOUNT")),
         "total_amount": money_string(summary.get("TOTAL") or summary.get("AMOUNT_DUE")),
         "items": items,
-        "payments": payments,
         "status": status,
         "validation_message": validation_message,
     }
@@ -229,8 +198,6 @@ def upsert_store(extraction: dict) -> str | None:
 def delete_existing_children(receipt_id: str) -> None:
     for item in ITEMS_TABLE.query(KeyConditionExpression="receipt_id = :r", ExpressionAttributeValues={":r": receipt_id}).get("Items", []):
         ITEMS_TABLE.delete_item(Key={"receipt_id": receipt_id, "line_number": item["line_number"]})
-    for payment in PAYMENTS_TABLE.query(KeyConditionExpression="receipt_id = :r", ExpressionAttributeValues={":r": receipt_id}).get("Items", []):
-        PAYMENTS_TABLE.delete_item(Key={"receipt_id": receipt_id, "id": payment["id"]})
 
 
 def update_receipt(receipt_id: str, updates: dict) -> None:
@@ -298,26 +265,6 @@ def decimal_or_none(value) -> Decimal | None:
 
 def decimal_or_default(value, default: str) -> Decimal:
     return decimal_or_none(value) or Decimal(default)
-
-
-def normalize_discount(value) -> str | None:
-    amount = decimal_or_none(value)
-    if amount is None:
-        return None
-    if amount > 0:
-        amount = -amount
-    return str(amount.quantize(Decimal("0.01")))
-
-
-def normalize_payment(value: str | None) -> str | None:
-    if not value:
-        return None
-    upper = value.upper()
-    if "TRANSFER" in upper or "BANK" in upper:
-        return "TRANSFER"
-    if "CASH" in upper:
-        return "CASH"
-    return upper.replace("MASTER CARD", "MASTERCARD")
 
 
 def normalize_date(value: str | None) -> str | None:

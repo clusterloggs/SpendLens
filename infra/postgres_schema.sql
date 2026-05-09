@@ -26,9 +26,6 @@ CREATE TABLE receipts (
   seller TEXT,
 
   currency_code CHAR(3) NOT NULL DEFAULT 'USD',
-  subtotal_amount NUMERIC(12, 2),
-  tax_amount NUMERIC(12, 2),
-  discount_amount NUMERIC(12, 2),
   total_amount NUMERIC(12, 2),
 
   raw_ocr_text TEXT,
@@ -55,15 +52,6 @@ CREATE TABLE receipt_items (
   UNIQUE (receipt_id, line_number)
 );
 
-CREATE TABLE receipt_payments (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  receipt_id UUID NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
-  method TEXT,
-  amount NUMERIC(12, 2),
-  change_amount NUMERIC(12, 2),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
 CREATE TABLE processing_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   receipt_id UUID NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
@@ -80,7 +68,6 @@ CREATE INDEX idx_receipts_image_hash ON receipts (image_hash);
 CREATE INDEX idx_receipts_status ON receipts (status);
 CREATE INDEX idx_receipt_items_receipt ON receipt_items (receipt_id);
 CREATE INDEX idx_receipt_items_name ON receipt_items (item_name);
-CREATE INDEX idx_receipt_payments_receipt ON receipt_payments (receipt_id);
 CREATE INDEX idx_processing_logs_receipt ON processing_logs (receipt_id, created_at);
 
 CREATE VIEW receipt_line_items_flat AS

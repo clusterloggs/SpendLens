@@ -145,23 +145,6 @@ Resources:
         - AttributeName: line_number
           KeyType: RANGE
 
-  ReceiptPaymentsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      SSESpecification:
-        SSEEnabled: true
-      AttributeDefinitions:
-        - AttributeName: receipt_id
-          AttributeType: S
-        - AttributeName: id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: receipt_id
-          KeyType: HASH
-        - AttributeName: id
-          KeyType: RANGE
-
   ProcessingLogsTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -234,7 +217,6 @@ Resources:
                   - !GetAtt ReceiptsTable.Arn
                   - !Sub "${ReceiptsTable.Arn}/index/*"
                   - !GetAtt ReceiptItemsTable.Arn
-                  - !GetAtt ReceiptPaymentsTable.Arn
                   - !GetAtt ProcessingLogsTable.Arn
               - Effect: Allow
                 Action:
@@ -285,7 +267,6 @@ Resources:
                   - !GetAtt ReceiptsTable.Arn
                   - !Sub "${ReceiptsTable.Arn}/index/*"
                   - !GetAtt ReceiptItemsTable.Arn
-                  - !GetAtt ReceiptPaymentsTable.Arn
                   - !GetAtt ProcessingLogsTable.Arn
               - Effect: Allow
                 Action:
@@ -311,7 +292,6 @@ Resources:
           STORES_TABLE: !Ref StoresTable
           RECEIPTS_TABLE: !Ref ReceiptsTable
           RECEIPT_ITEMS_TABLE: !Ref ReceiptItemsTable
-          RECEIPT_PAYMENTS_TABLE: !Ref ReceiptPaymentsTable
           PROCESSING_LOGS_TABLE: !Ref ProcessingLogsTable
           DEFAULT_CURRENCY: NGN
           PRESIGNED_URL_SECONDS: "600"
@@ -334,7 +314,6 @@ Resources:
           STORES_TABLE: !Ref StoresTable
           RECEIPTS_TABLE: !Ref ReceiptsTable
           RECEIPT_ITEMS_TABLE: !Ref ReceiptItemsTable
-          RECEIPT_PAYMENTS_TABLE: !Ref ReceiptPaymentsTable
           PROCESSING_LOGS_TABLE: !Ref ProcessingLogsTable
           DEFAULT_CURRENCY: NGN
 

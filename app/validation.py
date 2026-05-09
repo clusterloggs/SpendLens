@@ -35,10 +35,6 @@ def validate_extraction(extraction: dict[str, Any]) -> tuple[str, list[dict[str,
 
     total = dec(extraction.get("total_amount"))
     subtotal = dec(extraction.get("subtotal_amount"))
-    tax = dec(extraction.get("tax_amount")) or Decimal("0.00")
-    discount = dec(extraction.get("discount_amount")) or Decimal("0.00")
-    fee = dec(extraction.get("fee_amount")) or Decimal("0.00")
-    tip = dec(extraction.get("tip_amount")) or Decimal("0.00")
 
     if total is None:
         errors.append({"code": "MISSING_TOTAL", "message": "Receipt total could not be extracted.", "severity": "warning"})
@@ -55,14 +51,13 @@ def validate_extraction(extraction: dict[str, Any]) -> tuple[str, list[dict[str,
                 }
             )
 
-    if subtotal is not None and total is not None:
-        expected = subtotal + tax + fee + tip + discount
-        difference = abs(expected - total)
+    if subtotal is None and total is not None and items:
+        difference = abs(item_sum - total)
         if difference > Decimal("0.05"):
             errors.append(
                 {
-                    "code": "TOTAL_RECONCILIATION_WARNING",
-                    "message": f"Subtotal, tax, fee, tip, and discounts produce {expected}, not total {total}.",
+                    "code": "ITEM_TOTAL_MISMATCH",
+                    "message": f"Item sum {item_sum} differs from total {total} by {difference}.",
                     "severity": "warning",
                 }
             )
@@ -73,6 +68,15 @@ def validate_extraction(extraction: dict[str, Any]) -> tuple[str, list[dict[str,
             {
                 "code": "LOW_CONFIDENCE_ITEMS",
                 "message": f"{len(low_conf_items)} item row(s) require review.",
+                "severity": "warning",
+            }
+        )
+
+    for note in extraction.get("parser_metadata", {}).get("postprocess_notes", []):
+        errors.append(
+            {
+                "code": note.get("code", "POSTPROCESS_NOTE"),
+                "message": note.get("message", "Post-processing note requires review."),
                 "severity": "warning",
             }
         )

@@ -46,7 +46,7 @@ class AwsTextractMappingTests(unittest.TestCase):
         self.assertEqual(extraction["total_amount"], "1600.00")
         self.assertEqual(len(extraction["items"]), 2)
         self.assertEqual(extraction["items"][1]["item_name_clean"], "Golden Bite Sardine Bread")
-        self.assertEqual(extraction["payments"][0]["method"], "TRANSFER")
+        self.assertNotIn("payments", extraction)
 
         status, errors, confidence = validate_extraction(extraction)
         self.assertEqual(status, "validated", errors)

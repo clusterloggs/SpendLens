@@ -21,7 +21,7 @@ from .config import (
     ensure_runtime_dirs,
 )
 from .database import get_db, init_db
-from .models import ProcessingLog, Receipt, ReceiptItem, ReceiptPayment, Store, utc_now
+from .models import ProcessingLog, Receipt, ReceiptItem, Store, utc_now
 from .processing import process_receipt_job, record_correction
 from .utils import (
     decimalish,
@@ -43,7 +43,7 @@ init_db()
 app = FastAPI(
     title="Grocery Receipt Scanner",
     version="1.1.0",
-    description="MVP grocery receipt scanner with five core tables.",
+    description="MVP grocery receipt scanner with four core tables.",
 )
 
 FRONTEND_DIR = ROOT_DIR / "frontend"
@@ -216,9 +216,6 @@ def patch_receipt(receipt_id: str, payload: dict = Body(default={}), db: Session
         "customer_name",
         "seller",
         "currency_code",
-        "subtotal_amount",
-        "tax_amount",
-        "discount_amount",
         "total_amount",
     }
     alias_map = {"transaction_id": "ticket_number", "cashier_name": "seller"}
@@ -393,20 +390,14 @@ def serialize_receipt_detail(receipt: Receipt) -> dict[str, Any]:
         "customer_name": receipt.customer_name,
         "seller": receipt.seller,
         "timezone": None,
-        "subtotal_amount": decimalish(receipt.subtotal_amount),
-        "tax_amount": decimalish(receipt.tax_amount),
-        "discount_amount": decimalish(receipt.discount_amount),
         "total_amount": decimalish(receipt.total_amount),
         "validation_message": receipt.validation_message,
         "validation_errors": validation_errors_from_message(receipt.validation_message),
         "raw_text": receipt.raw_ocr_text,
         "raw_ocr_text": receipt.raw_ocr_text,
         "items": [serialize_item(item) for item in receipt.items],
-        "payments": [serialize_payment(payment) for payment in receipt.payments],
         "events": [serialize_log(log) for log in reversed(receipt.logs[-20:])],
         "pages": [],
-        "taxes": [],
-        "discounts": [],
         "created_at": serialize_datetime(receipt.created_at),
         "queued_at": serialize_datetime(receipt.queued_at),
         "processed_at": serialize_datetime(receipt.processed_at),
@@ -429,15 +420,6 @@ def serialize_item(item: ReceiptItem) -> dict[str, Any]:
         "total_price_amount": decimalish(item.total_price),
         "confidence": 1.0,
         "review_required": False,
-    }
-
-
-def serialize_payment(payment: ReceiptPayment) -> dict[str, Any]:
-    return {
-        "id": payment.id,
-        "method": payment.method,
-        "amount": decimalish(payment.amount),
-        "change_amount": decimalish(payment.change_amount),
     }
 
 

@@ -16,11 +16,9 @@ class ReceiptParserTests(unittest.TestCase):
         self.assertEqual(extraction["receipt_date"], "2026-05-05")
         self.assertEqual(extraction["receipt_time"], "18:23:00")
         self.assertEqual(extraction["subtotal_amount"], "23.26")
-        self.assertEqual(extraction["tax_amount"], "0.94")
-        self.assertEqual(extraction["discount_amount"], "-1.75")
         self.assertEqual(extraction["total_amount"], "22.45")
         self.assertEqual(len(extraction["items"]), 6)
-        self.assertEqual(len(extraction["discounts"]), 2)
+        self.assertNotIn("payments", extraction)
 
         bananas = extraction["items"][0]
         self.assertEqual(bananas["item_name_clean"], "Bananas")
